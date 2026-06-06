@@ -60,6 +60,8 @@ def _ids(conn):
 def crawl(conn, roots):
     """Ingest DAQ_*.txt under each root. Returns {'ingested','skipped','failed_parse','unresolved'}."""
     inst_id, cmap, cool_sample = _ids(conn)
+    cds = [dict(r) for r in conn.execute(   # cooldowns seeded from the registry; resolve by acquisition date
+        "SELECT label, start_date, end_date, f0_per_volt FROM cooldown")]
     stats = {"ingested": 0, "skipped": 0, "failed_parse": 0, "unresolved": 0}
     for root in roots:
         root = Path(root)
@@ -82,7 +84,7 @@ def crawl(conn, roots):
             header, df = sq.read_daq_file(str(path.parent), path.name)
             v = df["CHAN_01(V)"].to_numpy()
             bad, reason = sq.is_surge_spec(v)
-            label, _factor = resolve_cooldown(header.get("DATE"))   # cooldown by acquisition date
+            label, _factor = resolve_cooldown(header.get("DATE"), cds)   # cooldown by acquisition date
             if label is None:
                 stats["unresolved"] += 1
                 print(f"[crawl] UNRESOLVED COOLDOWN (calibration unknown), flagged: {path}")

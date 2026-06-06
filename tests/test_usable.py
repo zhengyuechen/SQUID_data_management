@@ -5,14 +5,14 @@ from catalog.dispatch import run_group_analysis
 from catalog.lineage import raws_of_product
 from catalog.cooldown_log import write_calibration_md
 from catalog.squid import sq
-from tests._fixtures import make_corpus, _jumped, set_header_date, SCAN_INTERVAL_S, N
+from tests._fixtures import make_corpus, _jumped, set_header_date, SCAN_INTERVAL_S, N, seed_test_cooldowns
 
 def _ready(tmp_path):
     """make_corpus (clean + a stuck/railed trace) + an added JUMP trace, crawled + usable computed."""
     root = tmp_path / "data"; make_corpus(root)
     jp = root / "sample" / "DAQ_4us_22mK_20000pts_1.txt"
     sq.save_pcs102(str(jp), _jumped(7), SCAN_INTERVAL_S); set_header_date(jp, "12-23-2025")
-    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn)
+    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn)
     crawl(conn, [root]); compute_usable_s(conn)
     return conn
 
@@ -45,7 +45,8 @@ def test_raw_overlay_plots_any_trace_including_frozen(tmp_path):
     assert Path(art).exists()
 
 def test_calibration_md_is_human_readable(tmp_path):
-    p = write_calibration_md(tmp_path / "_calibration.md")
+    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_test_cooldowns(conn)
+    p = write_calibration_md(conn, tmp_path / "_calibration.md")
     text = p.read_text()
     assert "0.837" in text and "0.834" in text and "0.762" in text
     assert "S-bias" in text and "f₀/V" in text and "Essentials" in text

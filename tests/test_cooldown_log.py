@@ -1,6 +1,7 @@
 from catalog.db import connect, init_db
 from catalog.seed import seed_lookups
 from catalog.cooldown_log import parse_logbook, load_logbooks, append_note, render
+from tests._fixtures import seed_test_cooldowns
 
 LOGBOOK = """# Cooldown logbook — YbZn2GaO5_Dec2025
 ## Setup
@@ -26,7 +27,7 @@ def test_parse_logbook(tmp_path):
 
 def test_load_logbooks_onto_cooldown(tmp_path):
     d = _write(tmp_path)
-    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn)
+    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn)
     assert load_logbooks(conn, d) == 1
     c = conn.execute("SELECT setup_notes, logbook_path FROM cooldown WHERE label='YbZn2GaO5_Dec2025'").fetchone()
     assert "0.0752 mA" in c["setup_notes"] and c["logbook_path"].endswith("YbZn2GaO5_Dec2025.md")
@@ -37,7 +38,7 @@ def test_load_logbooks_onto_cooldown(tmp_path):
 
 def test_append_note_roundtrips(tmp_path):
     d = _write(tmp_path)
-    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn); load_logbooks(conn, d)
+    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn); load_logbooks(conn, d)
     append_note("YbZn2GaO5_Dec2025", "run", "Base temp reached 10 mK.", logbook_dir=d)
     load_logbooks(conn, d)
     last = conn.execute("""SELECT note FROM cooldown_note cn JOIN cooldown c ON c.id=cn.cooldown_id
@@ -46,7 +47,7 @@ def test_append_note_roundtrips(tmp_path):
 
 def test_load_idempotent_no_duplicate_notes(tmp_path):
     d = _write(tmp_path)
-    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn)
+    conn = connect(tmp_path / "c.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn)
     load_logbooks(conn, d); load_logbooks(conn, d)
     n = conn.execute("SELECT count(*) FROM cooldown_note").fetchone()[0]
     assert n == 2          # re-load replaces, doesn't duplicate

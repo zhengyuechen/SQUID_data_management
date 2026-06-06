@@ -2,10 +2,10 @@ from catalog.db import connect, init_db
 from catalog.seed import seed_lookups
 from catalog.crawl import crawl, reresolve_cooldowns
 from catalog.explog import enrich_from_logs
-from tests._fixtures import make_corpus, make_native_corpus, make_bare_corpus
+from tests._fixtures import make_corpus, make_native_corpus, make_bare_corpus, seed_test_cooldowns
 
 def _db(tmp_path):
-    conn = connect(tmp_path / "cat.sqlite"); init_db(conn); seed_lookups(conn); return conn
+    conn = connect(tmp_path / "cat.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn); return conn
 
 def test_ingests_all(tmp_path):
     root = tmp_path / "data"; make_corpus(root)

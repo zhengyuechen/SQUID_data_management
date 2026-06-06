@@ -1,36 +1,21 @@
-"""Per-cooldown Phi_0/V calibration, owned by the catalog as DATA (values from
-CLAUDE.md). Cooldown is resolved by the PCS102 header acquisition DATE against
-each cooldown's date range — robust to folder layout (the real all-interval set
-mixes the YbZn sample and Sapphire background cooldowns in one tree)."""
+"""Cooldown resolution LOGIC only. The cooldown/calibration DATA lives in the catalog's
+`cooldown` table (catalog.sqlite), written via `seed.register_cooldown` / the `coollog
+add-cooldown` CLI — nothing is hardcoded in this module. A trace is assigned to a cooldown
+by matching its PCS102 header acquisition DATE against each cooldown's date range, which is
+robust to folder layout (the real all-interval set mixes the YbZn sample and Sapphire
+background cooldowns in one tree)."""
 
-CALIBRATION_FO_PER_V = {
-    "YbZn2GaO5_Dec2025": 0.837,
-    "Sapphire_Dec2025":  0.834,
-    "Sapphire_May2026":  0.762,
-}
-
-# Cooldown lookup-table seed; date ranges (ISO) + S-bias documented in CLAUDE.md / the lab PPTs.
-COOLDOWN_SEED = [
-    {"label": "YbZn2GaO5_Dec2025", "sample": "YbZn2GaO5",           "formula": "YbZn2GaO5",
-     "fridge": "dilution", "start_date": "2025-12-22", "end_date": "2026-01-04",
-     "f0_per_volt": CALIBRATION_FO_PER_V["YbZn2GaO5_Dec2025"], "s_bias_ma": 0.0747},
-    {"label": "Sapphire_Dec2025",  "sample": "Sapphire-background", "formula": "Al2O3",
-     "fridge": "dilution", "start_date": "2025-12-08", "end_date": "2025-12-14",
-     "f0_per_volt": CALIBRATION_FO_PER_V["Sapphire_Dec2025"], "s_bias_ma": 0.0752},
-    {"label": "Sapphire_May2026",  "sample": "Sapphire-background", "formula": "Al2O3",
-     "fridge": "dilution", "start_date": "2026-05-18", "end_date": "2026-06-30",  # same cooldown ran May into June
-     "f0_per_volt": CALIBRATION_FO_PER_V["Sapphire_May2026"], "s_bias_ma": 0.0654},
-]
 
 def _iso(mdy):
     "PCS102 header DATE 'MM-DD-YYYY' -> 'YYYY-MM-DD' (lexically comparable to the ISO ranges)."
     m, d, y = mdy.split("-")
     return f"{y}-{m}-{d}"
 
-def resolve_cooldown(header_date, cooldowns=COOLDOWN_SEED):
+
+def resolve_cooldown(header_date, cooldowns):
     """(label, factor) for a PCS102 header DATE ('MM-DD-YYYY'); (None, None) if the date
-    falls in no cooldown window. `cooldowns`: dicts/rows with start_date, end_date (ISO),
-    label, f0_per_volt."""
+    falls in no cooldown window. `cooldowns`: an iterable of dicts/rows with start_date,
+    end_date (ISO), label, f0_per_volt — e.g. rows from the catalog's `cooldown` table."""
     try:
         d = _iso(header_date)
     except (ValueError, AttributeError, TypeError):

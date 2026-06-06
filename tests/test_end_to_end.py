@@ -7,14 +7,14 @@ from catalog.dispatch import run_analysis
 from catalog.lineage import raws_of_product, products_of_raw
 from catalog.playbook import parse_playbook
 from tests._fixtures import (make_corpus, make_native_corpus, _healthy,
-                             SCAN_INTERVAL_S, set_header_date)
+                             SCAN_INTERVAL_S, set_header_date, seed_test_cooldowns)
 from catalog.squid import sq
 
 PB = Path(__file__).resolve().parents[1] / "analysis_playbook.md"
 
 def test_full_pipeline(tmp_path):
     data_root = tmp_path / "data"; make_corpus(data_root); make_native_corpus(data_root)
-    conn = connect(tmp_path / "cat.sqlite"); init_db(conn); seed_lookups(conn)
+    conn = connect(tmp_path / "cat.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn)
 
     # (1) idempotent crawl over both layouts (5 simple + 2 native = 7)
     assert crawl(conn, [data_root])["ingested"] == 7

@@ -3,11 +3,11 @@ from catalog.seed import seed_lookups
 from catalog.crawl import crawl
 from catalog.dispatch import run_analysis
 from catalog.lineage import products_of_raw, raws_of_product
-from tests._fixtures import make_corpus
+from tests._fixtures import make_corpus, seed_test_cooldowns
 
 def _ready(tmp_path):
     make_corpus(tmp_path / "data")
-    conn = connect(tmp_path / "cat.sqlite"); init_db(conn); seed_lookups(conn)
+    conn = connect(tmp_path / "cat.sqlite"); init_db(conn); seed_lookups(conn); seed_test_cooldowns(conn)
     crawl(conn, [tmp_path / "data"]); return conn
 
 def test_round_trips(tmp_path):

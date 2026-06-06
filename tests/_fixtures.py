@@ -9,9 +9,20 @@ the right cooldown window (save_pcs102 stamps 'today', which is in no window).
 import numpy as np
 from pathlib import Path
 from catalog.squid import sq
+from catalog.seed import register_cooldown
 
 SCAN_INTERVAL_S = 4.0e-6
 N = 20_000
+
+def seed_test_cooldowns(conn):
+    """Register the cooldowns the synthetic corpora's header dates fall into. Cooldowns are
+    operational data (not baked into the app), so tests register the ones they need."""
+    register_cooldown(conn, "YbZn2GaO5_Dec2025", "YbZn2GaO5", "2025-12-22", "2026-01-04", 0.837,
+                      formula="YbZn2GaO5", s_bias_ma=0.0747)
+    register_cooldown(conn, "Sapphire_Dec2025", "Sapphire-background", "2025-12-08", "2025-12-14", 0.834,
+                      formula="Al2O3", s_bias_ma=0.0752)
+    register_cooldown(conn, "Sapphire_May2026", "Sapphire-background", "2026-05-18", "2026-06-30", 0.762,
+                      formula="Al2O3", s_bias_ma=0.0654)
 
 def _healthy(seed):
     rng = np.random.default_rng(seed)

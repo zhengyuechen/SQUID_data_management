@@ -11,7 +11,7 @@ from catalog.cooldown_log import load_logbooks, write_calibration_md
 from roots import DEFAULT_ROOTS, PROJECTS_ROOT
 
 DB = Path("catalog.sqlite")
-conn = connect(DB); init_db(conn); seed_lookups(conn)   # seed UPSERTs cooldowns (picks up edited date ranges)
+conn = connect(DB); init_db(conn); seed_lookups(conn)   # ensures instrument; cooldowns persist in catalog.sqlite (register via coollog add-cooldown)
 
 t0 = time.time()
 stats = crawl(conn, DEFAULT_ROOTS)
@@ -19,7 +19,7 @@ enriched = enrich_from_logs(conn, DEFAULT_ROOTS)
 reresolved = reresolve_cooldowns(conn)                   # resolve any now-registered cooldowns, no re-read
 compute_usable_s(conn)                                   # usable (pre-jump) duration per trace
 logbooks = load_logbooks(conn)                           # index cooldowns/*.md setup + notes
-write_calibration_md()                                   # regenerate cooldowns/_calibration.md (human-readable)
+write_calibration_md(conn)                               # regenerate cooldowns/_calibration.md (human-readable)
 dt = time.time() - t0
 
 on_disk = sum(1 for _ in (PROJECTS_ROOT / "SQUID" / "data").rglob("DAQ_*.txt"))

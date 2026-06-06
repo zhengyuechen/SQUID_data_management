@@ -1,21 +1,27 @@
-"""Bootstrap the lookup tables once (instrument, samples, cooldowns-with-calibration).
-Idempotent via INSERT OR IGNORE on the UNIQUE name/label columns."""
-from catalog.calibration import COOLDOWN_SEED
+"""Lookup-table writes for the catalog. The cooldown/calibration DATA is NOT hardcoded
+here (or anywhere in Python) — it lives in `catalog.sqlite`'s `cooldown` table, written
+by `register_cooldown` (via the `coollog add-cooldown` CLI) and persisting across builds
+(init_db is CREATE-IF-NOT-EXISTS, so a re-build keeps existing cooldowns). `seed_lookups`
+only ensures the instrument row exists."""
 
 def seed_lookups(conn):
     conn.execute("INSERT OR IGNORE INTO instrument(name, kind) VALUES (?,?)", ("PCS102-SQUID", "squid"))
-    for row in COOLDOWN_SEED:
-        conn.execute("INSERT OR IGNORE INTO sample(name, formula) VALUES (?,?)", (row["sample"], row["formula"]))
-    for row in COOLDOWN_SEED:
-        sid = conn.execute("SELECT id FROM sample WHERE name=?", (row["sample"],)).fetchone()["id"]
-        # UPSERT so editing COOLDOWN_SEED (e.g. extending a date range) updates the row on re-seed.
-        conn.execute("""INSERT INTO cooldown
-                        (sample_id,label,fridge,start_date,end_date,f0_per_volt,s_bias_ma)
-                        VALUES (?,?,?,?,?,?,?)
-                        ON CONFLICT(label) DO UPDATE SET
-                          sample_id=excluded.sample_id, fridge=excluded.fridge,
-                          start_date=excluded.start_date, end_date=excluded.end_date,
-                          f0_per_volt=excluded.f0_per_volt, s_bias_ma=excluded.s_bias_ma""",
-                     (sid, row["label"], row["fridge"], row["start_date"],
-                      row["end_date"], row["f0_per_volt"], row["s_bias_ma"]))
     conn.commit()
+
+def register_cooldown(conn, label, sample, start_date, end_date, f0_per_volt,
+                      formula=None, fridge="dilution", s_bias_ma=None):
+    """Insert or update one cooldown (and its sample) in the catalog. UPSERT on label so
+    editing a date range / factor re-registers in place. Commits. Returns the label.
+    This is the ONLY way calibration enters the system — no Python-side seed list."""
+    conn.execute("INSERT OR IGNORE INTO sample(name, formula) VALUES (?,?)", (sample, formula))
+    sid = conn.execute("SELECT id FROM sample WHERE name=?", (sample,)).fetchone()["id"]
+    conn.execute("""INSERT INTO cooldown
+                    (sample_id,label,fridge,start_date,end_date,f0_per_volt,s_bias_ma)
+                    VALUES (?,?,?,?,?,?,?)
+                    ON CONFLICT(label) DO UPDATE SET
+                      sample_id=excluded.sample_id, fridge=excluded.fridge,
+                      start_date=excluded.start_date, end_date=excluded.end_date,
+                      f0_per_volt=excluded.f0_per_volt, s_bias_ma=excluded.s_bias_ma""",
+                 (sid, label, fridge, start_date, end_date, f0_per_volt, s_bias_ma))
+    conn.commit()
+    return label

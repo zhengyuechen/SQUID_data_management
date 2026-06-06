@@ -3,9 +3,11 @@
 A rebuildable **SQLite projection catalog** over the lab's raw PCS102 SQUID traces. **Disk owns the bytes; the DB (`catalog.sqlite`) owns queryable metadata + lineage.** Built 2026-06-05; see the broader SQUID/calibration context in the parent `projects/CLAUDE.md` (auto-loads with this file). Durable narrative: the dated `*_summary.md` / `*_report.md` / `*_verdict.md` / `*_plan.md` files in **`output/`**.
 
 ## Goal (where this is heading)
+
 End state: a **central lab data-management system** — a server-rack machine wired to every instrument PC, holding one SQL database of all measurement metadata + lineage + calibration, that **runs analysis automatically** (one raw SQUID trace → PSD / time-series / overlay; eventually a refined XRD figure *while* a scan runs). Raw bytes always stay on disk; the DB owns metadata, lineage, and calibration. A deterministic engine makes the routine products; a local **LLM sits on top later** for English→query and novel analysis.
 
 Four subsystems, in dependency order — **the catalog is the foundation everything else needs**:
+
 1. **SQL metadata catalog** — *this project* (built, SQLite).
 2. **Sync** instrument-PC → server.
 3. **On-acquisition real-time analysis** (hardest; built last).
@@ -16,12 +18,14 @@ Roadmap: **Phase 0** SQLite on a laptop (now — done) → **Phase 1** Postgres 
 ## Run it
 
 ```bash
-pip install -e ../SQUID/automation/AutoSQUID     # once: AutoSQUID + nidaqmx + pyserial (import fine w/o hardware)
+pip install AutoSQUID     # once: AutoSQUID + nidaqmx + pyserial (import fine w/o hardware)
 python -m pytest tests/ -q                        # 47 tests; run FROM this folder (conftest.py puts it on sys.path)
 python scripts/build_full_catalog.py                      # build/refresh catalog.sqlite over all of SQUID/data (idempotent + incremental)
 python scripts/catplot.py psd_overlay --temp 50 --cooldown YbZn2GaO5_Dec2025   # plot ANY selection -> figure + indexed
 python scripts/coollog.py show YbZn2GaO5_Dec2025                                # per-cooldown setup (V-Phi, restore values) + notes
 python scripts/coollog.py note YbZn2GaO5_Dec2025 --phase run "base temp 10 mK"  # append a lab note during calibration/run
+python scripts/coollog.py add-cooldown <label> --sample S --start 2026-05-18 --end 2026-06-30 --f0 0.762 --s-bias 0.065  # register a cooldown's calibration (no Python edits)
+python scripts/coollog.py registry                                             # list registered cooldowns (dates, f₀/V, S-bias)
 ```
 
 `scripts/build_full_catalog.py` = seed (UPSERT cooldowns) → crawl (skips unchanged, reads new) → enrich from `experiment_log.txt` → `reresolve_cooldowns` → prints a full report. Rebuildable projection: `rm catalog.sqlite && python scripts/build_full_catalog.py` regenerates it identically (disk is truth).
@@ -32,17 +36,17 @@ Drive everything through the scripts above; **do NOT open a raw `DAQ_*.txt` with
 
 ## Layout
 
-- `catalog/` — the package. `squid.py` (the ONLY SQUID import: `import AutoSQUID as sq` + `_psd_welch`) · `schema.sql`/`db.py` (6 tables) · `pcs102_meta.py` (filename parser) · `calibration.py` (`COOLDOWN_SEED` + `resolve_cooldown`) · `seed.py` · `crawl.py` (`crawl`, `reresolve_cooldowns`) · `explog.py` (log enrichment) · `analyzers.py`/`registry.py` · `dispatch.py` · `lineage.py` · `playbook.py`.
+- `catalog/` — the package. `squid.py` (the ONLY SQUID import: `import AutoSQUID as sq` + `_psd_welch`) · `schema.sql`/`db.py` (6 tables) · `pcs102_meta.py` (filename parser) · `calibration.py` (`resolve_cooldown` LOGIC only — no data) · `seed.py` (`seed_lookups` ensures the instrument; `register_cooldown` writes a cooldown row) · `crawl.py` (`crawl`, `reresolve_cooldowns`) · `explog.py` (log enrichment) · `analyzers.py`/`registry.py` · `dispatch.py` · `lineage.py` · `playbook.py`.
 - `scripts/catplot.py` — generic plot/dispatch CLI (use this for every figure). `scripts/build_full_catalog.py` — build/refresh. `scripts/coollog.py` — per-cooldown logbook CLI. `demo_queries.py` — prompt→SQL cookbook. `make_*_pdf.py` — deliverable PDFs. `roots.py` — `DEFAULT_ROOTS = [SQUID/data]`.
-- `cooldowns/<label>.md` — **human-readable lab logbooks** (one per cooldown): `## Essentials` + the `## Setup` block (restore values, Array/SQUID V-Phi, calibration factor) + a `## Notes` log of `- [phase] message` lines. Source of truth; `catalog/cooldown_log.py` indexes them onto `cooldown.setup_notes` + the `cooldown_note` table. `cooldowns/_calibration.md` is an **auto-generated** human-readable f₀/V + S-bias table (from `calibration.py`, regenerated each build; `_`-prefixed files are skipped by the logbook loader).
+- `cooldowns/<label>.md` — **human-readable lab logbooks** (one per cooldown): `## Essentials` + the `## Setup` block (restore values, Array/SQUID V-Phi, calibration factor) + a `## Notes` log of `- [phase] message` lines. Source of truth; `catalog/cooldown_log.py` indexes them onto `cooldown.setup_notes` + the `cooldown_note` table. `cooldowns/_calibration.md` is an **auto-generated** human-readable f₀/V + S-bias table (from the `cooldown` table, regenerated each build; `_`-prefixed files are skipped by the logbook loader).
 - `tests/` (pytest, synthetic PCS102 fixtures via AutoSQUID writers) · **`figures/<YYYY-MM-DD>_<HHMMSS>_<desc>/`** (dispatch writes all figures here) · `catalog.sqlite` (the catalog).
 
 Analyzers registered: per-trace `psd`, `time_series`; group `psd_overlay` (many traces → one figure). (`volt_temp_overlay` was removed — it required `TEMP_*.csv` the lab data rarely has.)
 
 ## Non-obvious things (read before changing anything)
 
-- **Calibration resolves by the PCS102 header `DATE` → cooldown date-range, NOT folder/filename.** One real folder mixes two cooldowns (only the date separates them). Per-cooldown f₀/V lives in `COOLDOWN_SEED` (calibration.py) as data. Registered: `YbZn2GaO5_Dec2025` 0.837, `Sapphire_Dec2025` 0.834, `Sapphire_May2026` 0.762 (this one spans May–June 2026 — one continuous cooldown).
-- **Adding/extending a cooldown = a metadata op, no 21 GB re-read.** Edit `COOLDOWN_SEED`, then run `scripts/build_full_catalog.py` (or `seed_lookups` which UPSERTs + `reresolve_cooldowns`). The crawl is **incremental** (skips files unchanged by size/mtime), so re-crawling alone will NOT recalibrate already-logged rows — `reresolve_cooldowns` does, from each row's stored `acquired_date`.
+- **Calibration resolves by the PCS102 header `DATE` → cooldown date-range, NOT folder/filename.** One real folder mixes two cooldowns (only the date separates them). Per-cooldown f₀/V lives in the **`cooldown` table in `catalog.sqlite`** (registered via `coollog add-cooldown`) — NO calibration data in any Python file. Registered: `YbZn2GaO5_Dec2025` 0.837, `Sapphire_Dec2025` 0.834, `Sapphire_May2026` 0.762 (this one spans May–June 2026 — one continuous cooldown). Because the calibration is operational data in the (git-ignored, rebuildable) catalog, `rm catalog.sqlite` clears it — re-register the cooldowns with the CLI; the disk-derived rows rebuild from a crawl. Git never touches `catalog.sqlite`.
+- **Adding/extending a cooldown = a metadata op, no 21 GB re-read.** Run `python scripts/coollog.py add-cooldown <label> --sample … --start … --end … --f0 … [--s-bias …]` — it UPSERTs the `cooldown` row and runs `reresolve_cooldowns` to back-fill already-crawled rows now in range. The crawl is **incremental** (skips files unchanged by size/mtime), so re-crawling alone will NOT recalibrate already-logged rows — `reresolve_cooldowns` does, from each row's stored `acquired_date`.
 - **Data outside every registered window is LOGGED but flagged `cooldown_resolved=0` (NULL calibration) — never guessed.** That's correct; register the cooldown to resolve it.
 - **Per-cooldown setup + lab notes are MANUAL data** (not derivable from a crawl), so they live in `cooldowns/<exact-label>.md` (human-edited, survives rebuild). `load_logbooks` indexes them and **cross-checks the logbook's stated calibration factor against `cooldown.f0_per_volt`**, warning on mismatch. Add one by creating `cooldowns/<cooldown-label>.md`; append notes with `scripts/coollog.py note`.
 - **Path-keyed, not filename-keyed.** The same filename appears in multiple folders with *different* content; rows key on the absolute `path` and `content_hash` proves uniqueness. Never join on filename alone.

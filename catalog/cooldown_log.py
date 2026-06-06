@@ -55,7 +55,8 @@ def load_logbooks(conn, logbook_dir=LOGBOOK_DIR):
             continue   # reference files (e.g. _calibration.md), not per-cooldown logbooks
         label = md.stem
         if label not in cmap:
-            print(f"[logbook] no registered cooldown '{label}' for {md.name} — add it to COOLDOWN_SEED first")
+            print(f"[logbook] no registered cooldown '{label}' for {md.name} — "
+                  f"register it first: python scripts/coollog.py add-cooldown {label} ...")
             continue
         cid, f0 = cmap[label]
         lb = parse_logbook(md)
@@ -80,22 +81,25 @@ def append_note(label, phase, text, logbook_dir=LOGBOOK_DIR):
     md.write_text(body.rstrip() + f"\n- [{phase}] {text}\n")
     return md
 
-def write_calibration_md(path=LOGBOOK_DIR / "_calibration.md"):
-    """Generate the human-readable calibration reference (f₀/V + S-bias per cooldown) from
-    COOLDOWN_SEED — so the calibration numbers live in markdown too, always in sync with
-    `catalog/calibration.py` (the build-time source). Regenerated on each build."""
-    from catalog.calibration import COOLDOWN_SEED
+def write_calibration_md(conn, path=LOGBOOK_DIR / "_calibration.md"):
+    """Generate the human-readable calibration reference (f₀/V + S-bias per cooldown) from the
+    catalog's `cooldown` table — a read-only mirror so the numbers are also browsable as markdown,
+    always in sync with the catalog (the source of truth). Regenerated on each build."""
     lines = [
         "# Cooldown calibration reference", "",
         "## Essentials",
         "- Per-cooldown SQUID calibration **f₀/V** and **S-bias**, for quick human reference.",
-        "- Generated from `catalog/calibration.py` (the build-time source) — edit calibration there; "
-        "this file is regenerated every build. Full V-Phi setup per cooldown: `cooldowns/<label>.md`.", "",
+        "- Generated from `catalog.sqlite`'s `cooldown` table (the source of truth) — edit it with "
+        "`python scripts/coollog.py add-cooldown ...`; this file is regenerated every build. "
+        "Full V-Phi setup per cooldown: `cooldowns/<label>.md`.", "",
         "---", "",
         "| Cooldown | Sample | Dates | f₀/V | S-bias (mA) |",
         "|---|---|---|---|---|",
     ]
-    for r in COOLDOWN_SEED:
+    for r in conn.execute("""SELECT c.label, s.name sample, c.start_date, c.end_date,
+                                    c.f0_per_volt, c.s_bias_ma
+                             FROM cooldown c LEFT JOIN sample s ON s.id=c.sample_id
+                             ORDER BY c.start_date"""):
         lines.append(f"| {r['label']} | {r['sample']} | {r['start_date']} → {r['end_date']} | "
                      f"{r['f0_per_volt']} | {r['s_bias_ma']} |")
     p = Path(path); p.parent.mkdir(parents=True, exist_ok=True)
