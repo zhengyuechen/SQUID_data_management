@@ -11,6 +11,12 @@ All notable changes to this project. Newest first. Dates are `YYYY-MM-DD`.
 
 ## 2026-06-06
 
+### Added
+- **Per-machine `config.json`** (git-ignored; `config.example.json` template + `build_full_catalog.py --init`) read by `catalog/config.py`: deployment paths `data_roots` (where raw `DAQ_*.txt` live, crawled), `ppt_roots` (parameter decks; declared for future tooling), and `db`. Falls back to the dev-tree default when unconfigured; `build_full_catalog.py` gains `--root` / `--db` overrides. Makes a fresh clone deployable on any machine without editing code — fixes the data root previously being hard-wired to the repo's position in the tree.
+
+### Fixed
+- `build_full_catalog.py` no longer crashes on an empty catalog (0 rows): it prints a clear "no measurements indexed / point the data roots here" hint instead of a `NoneType` formatting error.
+
 ### Changed
 - **Restructured** into `data_management_plan/SQUID_data_management/` (this repo, with full history) and a new sibling `general_data_management/`. The parent `data_management_plan/` is now a plain container holding both independent repos.
 - **Calibration data moved out of Python into the database.** `catalog/calibration.py` is now resolve-logic only; the per-cooldown factors (`f0_per_volt`, `s_bias_ma`, date ranges) live in `catalog.sqlite`'s `cooldown` table, written via `register_cooldown` / the new `coollog add-cooldown` CLI. No calibration constants in any source file.

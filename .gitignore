@@ -3,6 +3,9 @@ figures/
 results/
 catalog.sqlite
 
+# per-machine deployment config (copy config.example.json -> config.json)
+config.json
+
 # python
 __pycache__/
 *.py[cod]

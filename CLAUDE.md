@@ -19,8 +19,10 @@ Roadmap: **Phase 0** SQLite on a laptop (now — done) → **Phase 1** Postgres 
 
 ```bash
 pip install AutoSQUID     # once: AutoSQUID + nidaqmx + pyserial (import fine w/o hardware)
-python -m pytest tests/ -q                        # 47 tests; run FROM this folder (conftest.py puts it on sys.path)
-python scripts/build_full_catalog.py                      # build/refresh catalog.sqlite over all of SQUID/data (idempotent + incremental)
+python -m pytest tests/ -q                        # 59 tests; run FROM this folder (conftest.py puts it on sys.path)
+python scripts/build_full_catalog.py --init       # NEW MACHINE: writes config.json; edit data_roots to point at the data
+python scripts/build_full_catalog.py                      # build/refresh catalog.sqlite over the configured data roots (idempotent + incremental)
+python scripts/build_full_catalog.py --root <path-to-data>   # or point it at a folder directly (overrides config.json)
 python scripts/catplot.py psd_overlay --temp 50 --cooldown YbZn2GaO5_Dec2025   # plot ANY selection -> figure + indexed
 python scripts/coollog.py show YbZn2GaO5_Dec2025                                # per-cooldown setup (V-Phi, restore values) + notes
 python scripts/coollog.py note YbZn2GaO5_Dec2025 --phase run "base temp 10 mK"  # append a lab note during calibration/run
@@ -28,7 +30,9 @@ python scripts/coollog.py add-cooldown <label> --sample S --start 2026-05-18 --e
 python scripts/coollog.py registry                                             # list registered cooldowns (dates, f₀/V, S-bias)
 ```
 
-`scripts/build_full_catalog.py` = seed (UPSERT cooldowns) → crawl (skips unchanged, reads new) → enrich from `experiment_log.txt` → `reresolve_cooldowns` → prints a full report. Rebuildable projection: `rm catalog.sqlite && python scripts/build_full_catalog.py` regenerates it identically (disk is truth).
+`scripts/build_full_catalog.py` = seed instrument → crawl (skips unchanged, reads new) → enrich from `experiment_log.txt` → `reresolve_cooldowns` → prints a full report. Rebuildable projection: `rm catalog.sqlite && python scripts/build_full_catalog.py` regenerates it identically (disk is truth).
+
+**First run on a new machine (e.g. the bench PC):** the repo is a clone with **no `catalog.sqlite` and no `config.json`** (both git-ignored). (1) `python scripts/build_full_catalog.py --init` → writes `config.json`; edit its `data_roots` to point at this machine's data (and `ppt_roots` for parameter decks). (2) `python scripts/build_full_catalog.py` → crawls + indexes; every trace is flagged `cooldown_resolved=0` (calibration is never guessed) and the report prints the exact `coollog add-cooldown` commands. (3) Register each cooldown → it back-fills calibration onto the already-crawled rows via `reresolve_cooldowns` (no re-read). Data roots come from `config.json` (`catalog/config.py`), falling back to the dev-tree default when unconfigured.
 
 ## Operating rule — never `Read` a raw trace
 
@@ -37,7 +41,7 @@ Drive everything through the scripts above; **do NOT open a raw `DAQ_*.txt` with
 ## Layout
 
 - `catalog/` — the package. `squid.py` (the ONLY SQUID import: `import AutoSQUID as sq` + `_psd_welch`) · `schema.sql`/`db.py` (6 tables) · `pcs102_meta.py` (filename parser) · `calibration.py` (`resolve_cooldown` LOGIC only — no data) · `seed.py` (`seed_lookups` ensures the instrument; `register_cooldown` writes a cooldown row) · `crawl.py` (`crawl`, `reresolve_cooldowns`) · `explog.py` (log enrichment) · `analyzers.py`/`registry.py` · `dispatch.py` · `lineage.py` · `playbook.py`.
-- `scripts/catplot.py` — generic plot/dispatch CLI (use this for every figure). `scripts/build_full_catalog.py` — build/refresh. `scripts/coollog.py` — per-cooldown logbook CLI. `demo_queries.py` — prompt→SQL cookbook. `make_*_pdf.py` — deliverable PDFs. `roots.py` — `DEFAULT_ROOTS = [SQUID/data]`.
+- `scripts/catplot.py` — generic plot/dispatch CLI (use this for every figure). `scripts/build_full_catalog.py` — build/refresh. `scripts/coollog.py` — per-cooldown logbook + calibration-registry CLI. `roots.py` — dev-tree `DEFAULT_ROOTS = [SQUID/data]` (fallback). **`config.json`** (git-ignored, per machine; copy `config.example.json` or `--init`) — deployment paths `data_roots` + `ppt_roots` + `db`, loaded by **`catalog/config.py`**; overrides the `roots.py` default.
 - `cooldowns/<label>.md` — **human-readable lab logbooks** (one per cooldown): `## Essentials` + the `## Setup` block (restore values, Array/SQUID V-Phi, calibration factor) + a `## Notes` log of `- [phase] message` lines. Source of truth; `catalog/cooldown_log.py` indexes them onto `cooldown.setup_notes` + the `cooldown_note` table. `cooldowns/_calibration.md` is an **auto-generated** human-readable f₀/V + S-bias table (from the `cooldown` table, regenerated each build; `_`-prefixed files are skipped by the logbook loader).
 - `tests/` (pytest, synthetic PCS102 fixtures via AutoSQUID writers) · **`figures/<YYYY-MM-DD>_<HHMMSS>_<desc>/`** (dispatch writes all figures here) · `catalog.sqlite` (the catalog).
 

@@ -8,6 +8,3 @@
 
 | Cooldown | Sample | Dates | f₀/V | S-bias (mA) |
 |---|---|---|---|---|
-| Sapphire_Dec2025 | Sapphire-background | 2025-12-08 → 2025-12-14 | 0.834 | 0.0752 |
-| YbZn2GaO5_Dec2025 | YbZn2GaO5 | 2025-12-22 → 2026-01-04 | 0.837 | 0.0747 |
-| Sapphire_May2026 | Sapphire-background | 2026-05-18 → 2026-06-30 | 0.762 | 0.0654 |

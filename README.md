@@ -21,7 +21,8 @@ Run from the repo root:
 
 ```bash
 python -m pytest tests/ -q                 # the test suite (synthetic PCS102 fixtures)
-python scripts/build_full_catalog.py       # crawl the data root -> catalog.sqlite (idempotent, incremental)
+python scripts/build_full_catalog.py --init   # new machine: write config.json, then edit data_roots to point at the data
+python scripts/build_full_catalog.py       # crawl the configured data roots -> catalog.sqlite (idempotent, incremental)
 python scripts/catplot.py psd_overlay --temp 50 --cooldown YbZn2GaO5_Dec2025   # a calibrated PSD overlay
 python scripts/coollog.py show YbZn2GaO5_Dec2025                                # a cooldown's setup + notes
 python scripts/coollog.py add-cooldown YbZn2GaO5_Dec2025 --sample YbZn2GaO5 \
@@ -29,6 +30,14 @@ python scripts/coollog.py add-cooldown YbZn2GaO5_Dec2025 --sample YbZn2GaO5 \
 ```
 
 `catplot.py` plots **any** selection via flags (`--temp`, `--interval`, `--cooldown`, `--where`, `--include-partial`, `--any`, `--limit`) — adding a new *kind* of plot is one analyzer; reusing a kind is just different flags.
+
+## Deploy on another machine
+
+A fresh clone has **no `catalog.sqlite` and no `config.json`** (both git-ignored, so `git pull` never touches a machine's local index or paths). To stand it up:
+
+1. `python scripts/build_full_catalog.py --init` → writes `config.json`; set `data_roots` to wherever this machine's raw `DAQ_*.txt` live (and `ppt_roots` for parameter decks). Or copy `config.example.json`.
+2. `python scripts/build_full_catalog.py` → crawls + indexes. Every trace starts `cooldown_resolved=0` — calibration is **never guessed** — and the report prints the exact `coollog add-cooldown` command for each cooldown it sees.
+3. Register each cooldown (`coollog add-cooldown <label> --sample … --start … --end … --f0 …`); it back-fills calibration onto the already-indexed traces with no re-read.
 
 ## Layout
 

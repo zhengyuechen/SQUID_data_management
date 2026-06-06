@@ -1,0 +1,9 @@
+{
+  "db": "catalog.sqlite",
+  "data_roots": [
+    "/absolute/path/to/the/folder/holding/raw/DAQ_txt/files"
+  ],
+  "ppt_roots": [
+    "/absolute/path/to/parameter/powerpoint/decks (optional)"
+  ]
+}
