@@ -9,13 +9,17 @@ calibration registry (the `cooldown` table in catalog.sqlite — the source of t
   python coollog.py registry                              # dump the calibration registry (dates, f0/V, S-bias)
   python coollog.py add-cooldown <label> --sample S --start 2026-05-18 --end 2026-06-30 \
                                  --f0 0.762 [--formula Al2O3] [--fridge dilution] [--s-bias 0.0654]
+  python coollog.py propose-from-ppt [--ppt-root <dir>]   # read decks -> print add-cooldown proposals (human-confirmed)
 """
 import sys; sys.path.insert(0, ".")
 import argparse
+from pathlib import Path
 from catalog.db import connect, init_db
 from catalog.seed import register_cooldown
 from catalog.cooldown_log import load_logbooks, append_note, render
 from catalog.crawl import reresolve_cooldowns
+from catalog import ppt_extract
+from catalog.config import load_config, ppt_roots
 
 def main():
     ap = argparse.ArgumentParser(description="Cooldown logbook + calibration registry (in catalog.sqlite).")
@@ -34,6 +38,8 @@ def main():
     ac.add_argument("--formula", default=None)
     ac.add_argument("--fridge", default="dilution")
     ac.add_argument("--s-bias", dest="s_bias", type=float, default=None)
+    pp = sub.add_parser("propose-from-ppt", help="read the parameter decks and print human-confirmed add-cooldown proposals")
+    pp.add_argument("--ppt-root", action="append", default=None, help="deck folder (repeatable); overrides config.json ppt_roots")
     ap.add_argument("--db", default="catalog.sqlite")
     a = ap.parse_args()
 
@@ -44,7 +50,17 @@ def main():
         resolved = reresolve_cooldowns(conn)   # back-fill any already-crawled rows now in range (no file reads)
         print(f"registered {a.label}: {a.sample}  {a.start}→{a.end}  f0/V={a.f0}"
               + (f"  (resolved {resolved} previously-unresolved traces)" if resolved else ""))
-    elif a.cmd == "registry":
+    elif a.cmd == "propose-from-ppt":
+        roots = [Path(r) for r in a.ppt_root] if a.ppt_root else ppt_roots(load_config())
+        if not roots:
+            print("no ppt roots configured. Set ppt_roots in config.json, or pass --ppt-root <dir>.")
+        else:
+            stats = ppt_extract.crawl_decks(conn, roots)   # index decks into deck/deck_setup (factual; not calibration)
+            props = ppt_extract.propose_cooldowns(conn)
+            print(f"# scanned decks: {stats}  ->  {len(props)} factor-bearing setup slide(s)")
+            print("# CALIBRATION IS HUMAN-CONFIRMED: review each, fix the label/end date, then run it.\n")
+            for p in props:
+                print(ppt_extract.format_proposal(p)); print()
         for r in conn.execute("""SELECT c.label, s.name sample, c.start_date, c.end_date,
                                         c.f0_per_volt, c.s_bias_ma
                                  FROM cooldown c LEFT JOIN sample s ON s.id=c.sample_id

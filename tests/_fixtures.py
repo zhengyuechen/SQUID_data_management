@@ -77,6 +77,76 @@ def make_bare_corpus(root, date="12-23-2025"):
         paths[name] = daq
     return paths
 
+# ---- synthetic PowerPoint decks (for the ppt setup-parameter extractor) ----
+
+# The real May2026 Sapphire setup slide (slide 3), verbatim grammar (=, :, ~ separators;
+# S-bias in BOTH the Array and SQUID sections with different values).
+MAY2026_SETUP_BODY = (
+    "Array auto-tuning with S-bias = 0.3 mA\n"
+    "Test signal: 200Hz, 0.4V, Array FLUX\n"
+    "A-bias = 21.123 uA\n"
+    "Offset = 0.6607 mV\n"
+    "Output = 5.517 Vpp\n"
+    "Locked array\n"
+    "SQUID manual tuning with DAQ\n"
+    "Test signal: 200Hz, 1V, SQUID Flux\n"
+    "S-bias = 0.0654 mA\n"
+    "A-flux = 5.861 uA\n"
+    "Image: 0.2 V/div, 1 ms/div\n"
+    "Locked squid\n"
+    "SQUID auto-calibration\n"
+    "Data points = 1000, Flux step = 256, threshold = 0.5 V\n"
+    "Flux jump = 1.312 V\n"
+    "Factor = 0.762 Fo/V"
+)
+# The real Dec2025 YbZn setup slide (slide 2): ':' for the factor, '~' for Output.
+DEC2025_SETUP_BODY = (
+    "Restore values from background measurement and look at Array and SQUID V-Phi\n"
+    "Array V-Phi:\n"
+    "Test signal: 200 Hz, 0.4 V, Array Flux\n"
+    "S-bias = 0.3 mA, S-flux = 0 uA, A-flux = 0 uA\n"
+    "A-bias = 20.879 uA\n"
+    "Offset = 0.5697 mV\n"
+    "Image: 1 V/div, 1 ms/div\n"
+    "Output ~ 4.5 Vpp\n"
+    "Locked array\n"
+    "SQUID V-Phi:\n"
+    "Test signal: 200 Hz, 1 V, SQUID Flux\n"
+    "S-bias = 0.0752 mA\n"
+    "A-flux = 5.861 uA\n"
+    "Image: 0.2 V/div, 1 ms/div\n"
+    "Output ~ 0.7 V\n"
+    "Locked squid\n"
+    "Calibration Factor: 0.837 Fo/V"
+)
+
+def make_setup_deck(path, title="5/16/2026 Setup for 11 mK MXC", body=MAY2026_SETUP_BODY,
+                    with_measurement_slide=True):
+    """Write a minimal synthetic .pptx: a title slide, one setup slide (title + body text box),
+    and optionally a measurement slide — so the extractor can be tested with no real deck."""
+    from pptx import Presentation
+    from pptx.util import Inches
+    prs = Presentation()
+    title_only = prs.slide_layouts[5]    # 'Title Only' layout has a title placeholder
+
+    s0 = prs.slides.add_slide(title_only)
+    s0.shapes.title.text = "Measurements"
+
+    s = prs.slides.add_slide(title_only)
+    s.shapes.title.text = title
+    tb = s.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(5))
+    tb.text_frame.text = body
+
+    if with_measurement_slide:
+        m = prs.slides.add_slide(title_only)
+        m.shapes.title.text = "11mK Raw DAQ: 4us"
+        mtb = m.shapes.add_textbox(Inches(0.5), Inches(1.5), Inches(9), Inches(1))
+        mtb.text_frame.text = "Saved 5/16 12:08pm"
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    prs.save(str(path))
+    return Path(path)
+
 def make_native_corpus(root):
     """AutoSQUID-native: date-named folder, date-token + outcome-suffix filenames,
     TEMP sidecars, and a real experiment_log.txt. Returns {key: daq_path}."""
@@ -89,12 +159,12 @@ def make_native_corpus(root):
     log = str(folder / "experiment_log.txt")
     sq.log_experiment(log, {"timestamp": "2026-06-01T12:00:00", "scan_interval_us": 4, "n_target": N,
                             "n_acquired": N // 2, "n_clean": 0, "attempt": 1, "outcome": "JUMP",
-                            "jump_index": N // 2, "jump_time_s": round(dur / 2, 3), "n_resets": 1,
+                            "usable_points": N // 2, "usable_seconds": round(dur / 2, 3), "n_resets": 1,
                             "mean_V": 0.5, "std_V": 0.2, "T_start_K": 0.033, "T_end_K": 0.034,
                             "filename": jump_name})
     sq.log_experiment(log, {"timestamp": "2026-06-01T12:01:00", "scan_interval_us": 4, "n_target": N,
                             "n_acquired": N, "n_clean": 1, "attempt": 2, "outcome": "CLEAN",
-                            "jump_index": -1, "jump_time_s": "", "n_resets": 2,
+                            "usable_points": N, "usable_seconds": round(dur, 3), "n_resets": 2,
                             "mean_V": 0.012, "std_V": 0.002, "T_start_K": 0.0331, "T_end_K": 0.0332,
                             "filename": clean_name})
     return paths

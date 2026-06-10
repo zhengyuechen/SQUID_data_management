@@ -16,10 +16,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = REPO_ROOT / "config.json"
 
 
-def _dev_default_data_roots():
+def _dev_default(attr):
     try:
-        from roots import DEFAULT_ROOTS
-        return [str(p) for p in DEFAULT_ROOTS]
+        import roots
+        return [str(p) for p in getattr(roots, attr)]
     except Exception:
         return []
 
@@ -27,8 +27,8 @@ def _dev_default_data_roots():
 def defaults():
     return {
         "db": "catalog.sqlite",
-        "data_roots": _dev_default_data_roots(),   # folders holding raw DAQ_*.txt (crawled)
-        "ppt_roots": [],                           # folders holding parameter PowerPoint decks (declared; for future tooling)
+        "data_roots": _dev_default("DEFAULT_ROOTS"),     # folders holding raw DAQ_*.txt (crawled)
+        "ppt_roots": _dev_default("DEFAULT_PPT_ROOTS"),  # folders holding parameter PowerPoint decks (setup/calibration)
     }
 
 
@@ -47,6 +47,11 @@ def load_config(path=CONFIG_PATH):
 def data_roots(cfg=None):
     """The configured data roots as `Path`s."""
     return [Path(r) for r in (cfg or load_config())["data_roots"]]
+
+
+def ppt_roots(cfg=None):
+    """The configured PowerPoint-deck roots as `Path`s (skips unset placeholder paths)."""
+    return [Path(r) for r in (cfg or load_config()).get("ppt_roots", []) if not str(r).startswith("<")]
 
 
 def write_default_config(path=CONFIG_PATH, force=False):

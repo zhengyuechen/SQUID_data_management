@@ -12,21 +12,21 @@ from catalog.calibration import resolve_cooldown
 _CHUNK = re.compile(r"at chunk (\d+)/(\d+)")
 
 def compute_usable_s(conn):
-    """Set usable_s per trace: full duration for CLEAN; the pre-jump prefix for a
-    baseline-jump/surge (parsed from the integrity reason's 'at chunk N/nc'); NULL for
-    stuck/dead/already-surged. Pure metadata (no file reads). Returns rows updated."""
+    """Set usable_s per trace: the experiment log's usable_seconds when present (authoritative, from
+    AutoSQUID); else full duration for CLEAN, else the pre-jump prefix for a jump/surge (parsed from the
+    integrity reason's 'at chunk N/nc'); NULL for stuck/dead/already-surged. No file reads."""
     n = 0
-    for r in conn.execute("SELECT id, integrity_pass, integrity_reason, duration_s, jump_time_s FROM raw_measurement").fetchall():
+    for r in conn.execute("SELECT id, integrity_pass, integrity_reason, duration_s, usable_seconds FROM raw_measurement").fetchall():
         dur = r["duration_s"]
-        if r["integrity_pass"]:
-            usable = dur
+        if r["usable_seconds"] is not None and r["usable_seconds"] > 0:
+            usable = r["usable_seconds"]                    # logged usable prefix (preferred)
+        elif r["integrity_pass"]:
+            usable = dur                                    # clean, no log -> full duration
         else:
             usable = None
             m = _CHUNK.search(r["integrity_reason"] or "")
-            if m and dur:                                   # is_surge_spec located the jump (preferred)
+            if m and dur:                                   # is_surge_spec located the jump
                 usable = (int(m.group(1)) / int(m.group(2))) * dur
-            elif r["jump_time_s"] is not None and dur and 0 < r["jump_time_s"] < dur:
-                usable = r["jump_time_s"]                    # fallback: the acquisition's own jump location
         conn.execute("UPDATE raw_measurement SET usable_s=? WHERE id=?", (usable, r["id"]))
         n += 1
     conn.commit()
@@ -100,7 +100,7 @@ def crawl(conn, roots):
                 duration_s=n * dt, fs_hz=(1.0 / dt) if dt else None,
                 integrity_pass=int(not bad), integrity_reason=reason,
                 outcome=meta["outcome"],                            # from filename suffix (enriched later from log)
-                n_resets=None, t_start_K=None, t_end_K=None, jump_time_s=None,
+                n_resets=None, t_start_K=None, t_end_K=None, usable_seconds=None, usable_points=None,
                 mean_V=float(v.mean()), std_V=float(v.std()),
                 temp_sidecar_path=(str(sidecar) if sidecar.exists() else None),
                 cooldown_resolved=int(label is not None),
@@ -110,7 +110,8 @@ def crawl(conn, roots):
             cols = ", ".join(row); ph = ", ".join("?" for _ in row)
             # On re-ingest, preserve log-enriched fields (don't clobber with NULL from a re-crawl).
             upd = ", ".join(f"{c}=excluded.{c}" for c in row
-                            if c not in ("path", "outcome", "n_resets", "t_start_K", "t_end_K", "jump_time_s"))
+                            if c not in ("path", "outcome", "n_resets", "t_start_K", "t_end_K",
+                                         "usable_seconds", "usable_points"))
             upd += (", outcome=COALESCE(excluded.outcome, raw_measurement.outcome)")
             conn.execute(f"INSERT INTO raw_measurement ({cols}) VALUES ({ph}) "
                          f"ON CONFLICT(path) DO UPDATE SET {upd}", list(row.values()))

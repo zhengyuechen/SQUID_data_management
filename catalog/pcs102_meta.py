@@ -16,7 +16,7 @@ _FN = re.compile(
     r"^DAQ_(?:(?P<date>[A-Za-z][A-Za-z0-9-]*)_)?"      # optional AutoSQUID date token, e.g. Jun01
     r"(?P<ival>\d+(?:\.\d+)?)(?P<iunit>us|ms)"
     r"_(?P<temp>\d+(?:p\d+)?(?:mK|K)[A-Za-z]*)"
-    r"_(?P<npts>\d+)(?P<nmult>[kM]?)pts"
+    r"_(?P<npts>\d+(?:p\d+)?)(?P<nmult>[kM]?)pts"        # npts may carry a 'p' decimal (AutoSQUID usable-count tag, e.g. 8p4M)
     r"(?:_(?P<run>\d+))?"                              # optional order/run index
     r"(?:_(?P<outcome>[A-Z]+))?\.txt$")                # optional outcome suffix (failed traces)
 
@@ -37,7 +37,7 @@ def parse_daq_filename(name):
         return None
     return {"scan_interval_us": float(m["ival"]) * _INTERVAL_US[m["iunit"]],
             "temp_mK": temp_mK,
-            "n_points": int(m["npts"]) * _NPTS_MULT[m["nmult"]],
+            "n_points": round(float(m["npts"].replace("p", ".")) * _NPTS_MULT[m["nmult"]]),   # round, not int: 8.2*1e6 truncates to 8199999
             "run_index": int(m["run"]) if m["run"] else None,
             "date_token": m["date"],
             "outcome": m["outcome"]}            # None for clean traces

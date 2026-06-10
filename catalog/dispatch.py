@@ -1,8 +1,22 @@
 """Resolve a catalog query to clean traces, run an analyzer per trace, record the
 derived products + lineage. Caches on (kind, raw_id, params)."""
 from pathlib import Path
+from catalog import style
 from catalog.db import dumps
 from catalog.registry import REGISTRY, CODE_REF, GROUP_REGISTRY, GROUP_CODE_REF
+
+# The user's failure/clean vocabulary maps to the `outcome` column (the acquisition's
+# own label). 'surged'/'surge' -> 'SURGE', etc.; anything else is just upper-cased.
+OUTCOME_ALIASES = {
+    "surge": "SURGE", "surged": "SURGE",
+    "jump": "JUMP", "jumped": "JUMP",
+    "clean": "CLEAN",
+    "bad_baseline": "BAD_BASELINE", "badbaseline": "BAD_BASELINE", "bad-baseline": "BAD_BASELINE",
+}
+
+def normalize_outcome(s):
+    """A word for a category -> the DB `outcome` value (e.g. 'surged' -> 'SURGE')."""
+    return OUTCOME_ALIASES.get(s.strip().lower(), s.strip().upper())
 
 def _select(conn, where, include_partial=False, include_all=False, limit=None):
     # include_all: ANY trace (for diagnostic raw inspection, incl. frozen/failed).
@@ -30,13 +44,15 @@ def _cached(conn, kind, raw_id, params_json):
                      (kind, params_json, raw_id)).fetchone()
     return r["id"] if r else None
 
-def run_analysis(conn, kind, where, params, results_root, stamp):
-    """Run `kind` over every clean trace matching `where`. Returns [product_id, ...]."""
+def run_analysis(conn, kind, where, params, results_root, stamp, include_all=False):
+    """Run `kind` over matching traces (clean only by default; include_all=True widens to ANY
+    trace, e.g. inspecting a gate-failed --outcome). Returns [product_id, ...]."""
     if kind not in REGISTRY:
         raise KeyError(f"unknown analyzer kind {kind!r}; registered: {sorted(REGISTRY)}")
-    rows = _select_clean(conn, where)
+    style.apply()
+    rows = _select(conn, where, include_all=include_all)
     if not rows:
-        raise ValueError(f"no clean traces match WHERE ({where})")
+        raise ValueError(f"no {'matching' if include_all else 'clean'} traces match WHERE ({where})")
     params_json = dumps(params)
     outdir = Path(results_root) / f"{stamp}_{kind.replace('_', '-')}"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -74,6 +90,7 @@ def run_group_analysis(conn, kind, where, params, results_root, stamp,
     (diagnostic, e.g. frozen ones); limit caps how many."""
     if kind not in GROUP_REGISTRY:
         raise KeyError(f"unknown group analyzer {kind!r}; registered: {sorted(GROUP_REGISTRY)}")
+    style.apply()
     rows = _select(conn, where, include_partial, include_all, limit)
     if not rows:
         raise ValueError(f"no clean traces match WHERE ({where})")

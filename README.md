@@ -27,6 +27,7 @@ python scripts/catplot.py psd_overlay --temp 50 --cooldown YbZn2GaO5_Dec2025   #
 python scripts/coollog.py show YbZn2GaO5_Dec2025                                # a cooldown's setup + notes
 python scripts/coollog.py add-cooldown YbZn2GaO5_Dec2025 --sample YbZn2GaO5 \
        --start 2025-12-22 --end 2026-01-04 --f0 0.837 --s-bias 0.0747          # register/edit a cooldown's calibration
+python scripts/coollog.py propose-from-ppt                                       # read the parameter decks -> print add-cooldown proposals (f₀/V), human-confirmed
 ```
 
 `catplot.py` plots **any** selection via flags (`--temp`, `--interval`, `--cooldown`, `--where`, `--include-partial`, `--any`, `--limit`) — adding a new *kind* of plot is one analyzer; reusing a kind is just different flags.
@@ -63,6 +64,8 @@ python scripts/coollog.py registry        # list all registered cooldowns (dates
 ```
 
 Each cooldown also has a human `cooldowns/<label>.md` logbook (V-Phi setup + a phased notes log); if it restates the factor, the build **cross-checks** it against the `cooldown` row and warns on any mismatch.
+
+The per-cooldown calibration factor (f₀/V) lives **only in the measurement PowerPoint decks**. `python scripts/coollog.py propose-from-ppt` reads those decks (read-only) and prints a ready-to-run `add-cooldown` proposal per setup slide — you review the label/date range and run it. Calibration is **never** auto-written: the deck values are a proposal, the human is the gate.
 
 Note: `catalog.sqlite` holds this calibration *and* the disk-derived index, and it is git-ignored (rebuildable, never pushed). Deleting it therefore also clears the registered cooldowns — re-register them with the CLI above (the disk-derived rows rebuild themselves from a crawl).
 

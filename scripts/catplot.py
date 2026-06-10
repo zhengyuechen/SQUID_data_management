@@ -15,16 +15,17 @@ import argparse
 from datetime import datetime
 from catalog.db import connect
 from catalog.registry import REGISTRY, GROUP_REGISTRY
-from catalog.dispatch import run_analysis, run_group_analysis
+from catalog.dispatch import run_analysis, run_group_analysis, normalize_outcome
 from catalog.lineage import raws_of_product
 
 def build_where(a):
     """Compose a WHERE predicate from convenience flags + a raw --where (all ANDed).
-    integrity_pass=1 is always added by the dispatcher itself."""
+    integrity_pass=1 is always added by the dispatcher itself (unless widened)."""
     clauses = []
     if a.cooldown:        clauses.append(f"cooldown_id=(SELECT id FROM cooldown WHERE label='{a.cooldown}')")
     if a.temp is not None:     clauses.append(f"temp_mK={a.temp}")
     if a.interval is not None: clauses.append(f"scan_interval_us={a.interval}")
+    if a.outcome:         clauses.append(f"outcome='{normalize_outcome(a.outcome)}'")
     if a.where:           clauses.append(f"({a.where})")
     return " AND ".join(clauses)
 
@@ -36,6 +37,9 @@ def main():
     ap.add_argument("--cooldown", help="cooldown label, e.g. YbZn2GaO5_Dec2025")
     ap.add_argument("--temp", type=float, help="temperature in mK")
     ap.add_argument("--interval", type=float, help="scan interval in us")
+    ap.add_argument("--outcome", help="filter by the acquisition outcome: surged/jumped/clean/bad_baseline "
+                                      "(=SURGE/JUMP/CLEAN/BAD_BASELINE). A non-clean outcome auto-includes "
+                                      "gate-failed traces, so you don't also need --any.")
     ap.add_argument("--P", type=int, nargs="+", default=[100], help="Welch segment count(s)")
     ap.add_argument("--window", help="FFT window (analyzer default: hanning)")
     ap.add_argument("--title", help="figure title")
@@ -54,13 +58,16 @@ def main():
     ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     stamp = f"{ts}_{a.name}" if a.name else ts
     where = build_where(a)
+    # A non-clean outcome (SURGE/JUMP/BAD_BASELINE) is gate-failed, so widen selection to ANY trace.
+    include_all = a.any or (a.outcome is not None and normalize_outcome(a.outcome) != "CLEAN")
 
     conn = connect(a.db)
     if a.kind in GROUP_REGISTRY:
         pids = [run_group_analysis(conn, a.kind, where, params, results_root="figures", stamp=stamp,
-                                   include_partial=a.include_partial, include_all=a.any, limit=a.limit)]
+                                   include_partial=a.include_partial, include_all=include_all, limit=a.limit)]
     elif a.kind in REGISTRY:
-        pids = run_analysis(conn, a.kind, where, params, results_root="figures", stamp=stamp)
+        pids = run_analysis(conn, a.kind, where, params, results_root="figures", stamp=stamp,
+                            include_all=include_all)
     else:
         conn.close(); sys.exit(f"unknown kind {a.kind!r}; choose from {kinds}")
 

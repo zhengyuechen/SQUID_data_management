@@ -13,7 +13,7 @@ from catalog.seed import seed_lookups
 from catalog.crawl import crawl, reresolve_cooldowns, compute_usable_s
 from catalog.explog import enrich_from_logs
 from catalog.cooldown_log import load_logbooks, write_calibration_md
-from catalog.config import load_config, data_roots, write_default_config
+from catalog.config import load_config, data_roots, ppt_roots, write_default_config
 
 ap = argparse.ArgumentParser(description="Build/refresh the catalog over the configured data roots.")
 ap.add_argument("--root", action="append", default=None,
@@ -41,6 +41,14 @@ reresolved = reresolve_cooldowns(conn)                   # resolve any now-regis
 compute_usable_s(conn)                                   # usable (pre-jump) duration per trace
 logbooks = load_logbooks(conn)                           # index cooldowns/*.md setup + notes
 write_calibration_md(conn)                               # regenerate cooldowns/_calibration.md (human-readable)
+deck_stats = None
+try:                                                     # index parameter decks (factual; calibration stays human-confirmed)
+    from catalog.ppt_extract import crawl_decks          # crawl_decks itself tolerates a corrupt deck (per-deck);
+    droots = ppt_roots(cfg)                              # only a MISSING python-pptx is swallowed here, so real bugs surface
+    if droots:
+        deck_stats = crawl_decks(conn, droots)
+except ImportError as e:                                  # python-pptx not installed -> non-fatal, decks just aren't indexed
+    print(f"[decks] python-pptx unavailable, skipped ppt indexing: {e}")
 dt = time.time() - t0
 
 on_disk = sum(1 for root in roots for _ in Path(root).rglob("DAQ_*.txt"))
@@ -49,6 +57,10 @@ print(f"=== built {DB.resolve()} ({DB.stat().st_size/1024:.0f} KB) in {dt:.0f}s 
 print(f"data roots: {[str(r) for r in roots]}")
 print(f"crawl: {stats}   log-enriched: {enriched}   newly calibration-resolved: {reresolved}   logbooks indexed: {logbooks}")
 print(f"DAQ_*.txt on disk: {on_disk}   |   rows in catalog: {n_rows}")
+if deck_stats:
+    n_prop = conn.execute("SELECT count(*) FROM deck_setup WHERE f0_per_volt IS NOT NULL").fetchone()[0]
+    print(f"decks indexed: {deck_stats}   ({n_prop} factor-bearing setup slides)  "
+          f"->  `python scripts/coollog.py propose-from-ppt` for human-confirmed calibration proposals")
 
 if n_rows == 0:
     print("\n(no measurements indexed yet)")

@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
+from catalog import style
 from catalog.squid import sq, _psd_welch
 
 def _save_current(stem):
-    fig = plt.gcf(); path = f"{stem}.png"; fig.savefig(path, dpi=110); plt.close("all"); return path
+    fig = plt.gcf(); path = f"{stem}.png"; fig.savefig(path, dpi=style.DPI); plt.close("all"); return path
 
 def psd(row, factor, params, outdir):
     """Welch PSD figure via sq.plot_psd; scalars via _psd_welch (largest P)."""
@@ -33,7 +34,7 @@ def time_series(row, factor, params, outdir):
     sq.plot_run(cfg, filename_list=[fn])
     arts = []
     for i, num in enumerate(plt.get_fignums()):
-        p = str(outdir / f"run_{fn[:-4]}_{i}.png"); plt.figure(num).savefig(p, dpi=110); arts.append(p)
+        p = str(outdir / f"run_{fn[:-4]}_{i}.png"); plt.figure(num).savefig(p, dpi=style.DPI); arts.append(p)
     plt.close("all")
     header, df = sq.read_daq_file(str(folder), fn); v = df["CHAN_01(V)"].to_numpy(); dt = float(header["SCANINTVAL"])
     return arts[0], {"mean_V": float(v.mean()), "std_V": float(v.std()),
@@ -48,7 +49,7 @@ def psd_overlay(inputs, params, outdir):
     window = params.get("window", "hanning")
     title = params.get("title", "PSD overlay")
     plt.close("all")
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=style.FIGSIZE)
     n = 0
     for row, factor in sorted(inputs, key=lambda rf: (rf[0].get("scan_interval_us") or 0,
                                                        rf[0].get("temp_mK") or 0)):
@@ -68,10 +69,10 @@ def psd_overlay(inputs, params, outdir):
             lab += f" (pre-jump {usable:.0f}s)"
         plt.loglog(f[1:], S[1:], lw=0.7, label=lab)
         n += 1
-    plt.xlabel("Frequency (Hz)"); plt.ylabel(r"PSD ($f_0^2$/Hz)")
-    plt.title(f"{title}  (n={n}, P={P})"); plt.legend(fontsize=7, ncol=2); plt.tight_layout()
+    plt.xlabel(style.PSD_XLABEL); plt.ylabel(style.PSD_YLABEL)
+    plt.title(f"{title}  (n={n}, P={P})"); plt.legend(ncol=2); plt.tight_layout()
     art = str(outdir / "psd_overlay.png")
-    plt.savefig(art, dpi=130); plt.close("all")
+    plt.savefig(art, dpi=style.DPI); plt.close("all")
     return art, {"n_traces": n, "P": P, "window": window}
 
 def raw_overlay(inputs, params, outdir):
@@ -89,8 +90,8 @@ def raw_overlay(inputs, params, outdir):
         ax.plot((np.arange(len(v)) * dt)[::step], v[::step], lw=0.4)
         ax.set_ylabel("V", fontsize=8); ax.tick_params(labelsize=7)
         ax.set_title(f"{row['filename']}   [{(row.get('integrity_reason') or 'ok')[:46]}]", fontsize=8)
-    axes[-1, 0].set_xlabel("Time (s)")
+    axes[-1, 0].set_xlabel(style.TS_XLABEL)
     fig.suptitle(params.get("title", "Raw voltage traces"), fontsize=11)
     fig.tight_layout()
-    art = str(outdir / "raw_overlay.png"); fig.savefig(art, dpi=120); plt.close("all")
+    art = str(outdir / "raw_overlay.png"); fig.savefig(art, dpi=style.DPI); plt.close("all")
     return art, {"n_traces": len(rows), "downsample": ds}

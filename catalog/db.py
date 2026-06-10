@@ -14,15 +14,18 @@ def connect(db_path):
 def init_db(conn):
     conn.executescript(SCHEMA_PATH.read_text())
     # migrate older DBs that predate newer columns / names (no-op on fresh DBs)
-    for table, col in [("cooldown", "logbook_path TEXT"), ("raw_measurement", "usable_s REAL")]:
+    for table, col in [("cooldown", "logbook_path TEXT"), ("raw_measurement", "usable_s REAL"),
+                       ("raw_measurement", "usable_points INTEGER")]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass   # column already exists
-    try:
-        conn.execute("ALTER TABLE cooldown RENAME COLUMN phi0_per_volt TO f0_per_volt")
-    except sqlite3.OperationalError:
-        pass   # already renamed (or fresh DB)
+    for rename in ["ALTER TABLE cooldown RENAME COLUMN phi0_per_volt TO f0_per_volt",
+                   "ALTER TABLE raw_measurement RENAME COLUMN jump_time_s TO usable_seconds"]:
+        try:
+            conn.execute(rename)
+        except sqlite3.OperationalError:
+            pass   # already renamed (or fresh DB)
     conn.commit()
 
 def dumps(obj):

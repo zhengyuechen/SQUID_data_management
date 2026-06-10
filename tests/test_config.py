@@ -1,5 +1,5 @@
 import json
-from catalog.config import load_config, data_roots, write_default_config
+from catalog.config import load_config, data_roots, ppt_roots, write_default_config
 
 def test_defaults_used_when_no_file(tmp_path):
     cfg = load_config(tmp_path / "nope.json")
@@ -19,6 +19,14 @@ def test_empty_value_falls_back(tmp_path):
     p.write_text(json.dumps({"db": "", "data_roots": []}))   # empty -> default
     cfg = load_config(p)
     assert cfg["db"] == "catalog.sqlite"
+
+def test_ppt_roots_skips_unset_placeholder(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"ppt_roots": ["<absolute path to parameter PowerPoint decks (optional)>"]}))
+    cfg = load_config(p)
+    assert ppt_roots(cfg) == []                    # the --init placeholder is not a real root
+    p.write_text(json.dumps({"ppt_roots": ["/decks/a", "/decks/b"]}))
+    assert [str(r) for r in ppt_roots(load_config(p))] == ["/decks/a", "/decks/b"]
 
 def test_write_default_config_is_safe(tmp_path):
     p = tmp_path / "config.json"

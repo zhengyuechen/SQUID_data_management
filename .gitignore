@@ -6,6 +6,13 @@ catalog.sqlite
 # per-machine deployment config (copy config.example.json -> config.json)
 config.json
 
+# local-only narrative (design docs / verdicts / plans) — kept out of the repo
+output/
+
+# per-machine cooldown logbooks + calibration ref — generated on each machine
+# (planned: auto-extracted from the PowerPoint decks in config.json ppt_roots)
+cooldowns/
+
 # python
 __pycache__/
 *.py[cod]

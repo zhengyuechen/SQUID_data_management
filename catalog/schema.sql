@@ -40,8 +40,9 @@ CREATE TABLE IF NOT EXISTS raw_measurement (
   outcome TEXT,                          -- acquisition's own verdict (filename suffix / experiment_log): CLEAN/JUMP/SURGE/...
   n_resets INTEGER,                      -- from experiment_log
   t_start_K REAL, t_end_K REAL,          -- from experiment_log
-  jump_time_s REAL,                      -- from experiment_log
-  usable_s REAL,                         -- usable (pre-jump) duration: full for clean, the prefix for jump/surge, NULL for stuck/dead
+  usable_seconds REAL,                   -- usable (clean pre-jump) duration, from experiment_log (AutoSQUID)
+  usable_points INTEGER,                 -- usable (clean pre-jump) point count, from experiment_log (AutoSQUID)
+  usable_s REAL,                         -- canonical usable duration: the log's usable_seconds if present, else gate-computed; NULL for stuck/dead
   mean_V REAL, std_V REAL,
   temp_sidecar_path TEXT,
   cooldown_resolved INTEGER NOT NULL,    -- 1 if cooldown/calibration resolved from header date, else 0
@@ -59,6 +60,30 @@ CREATE TABLE IF NOT EXISTS product_input (
   role TEXT,
   PRIMARY KEY (derived_product_id, raw_measurement_id));
 
+-- PowerPoint parameter decks live in their OWN tables (a deck is a document ABOUT
+-- measurements, not a measurement). They are NOT raw_measurement rows. The deck tables
+-- record what the deck SAYS; the authoritative calibration still only enters the cooldown
+-- table via a human-confirmed `coollog add-cooldown`.
+CREATE TABLE IF NOT EXISTS deck (
+  id INTEGER PRIMARY KEY,
+  path TEXT UNIQUE NOT NULL, filename TEXT NOT NULL,
+  sample_guess TEXT,                     -- parsed from the filename ("SQ180 w Sapphire" -> Sapphire)
+  slide_count INTEGER,
+  core_created TEXT, core_modified TEXT,
+  size_bytes INTEGER, mtime_ns INTEGER, content_hash TEXT, crawled_at TEXT);
+
+CREATE TABLE IF NOT EXISTS deck_setup (
+  id INTEGER PRIMARY KEY,
+  deck_id INTEGER NOT NULL REFERENCES deck(id),
+  slide_index INTEGER,
+  setup_date TEXT,                       -- ISO, from the slide title
+  mxc_label TEXT,                        -- "11 mK", from the title
+  f0_per_volt REAL,                      -- THE calibration factor (f0/V) — the field that feeds PSD
+  flux_jump_v REAL,
+  params TEXT,                           -- JSON: section-namespaced V-Phi context (array_*/squid_*)
+  raw_text TEXT);
+
+CREATE INDEX IF NOT EXISTS ix_deck_setup_deck ON deck_setup(deck_id);
 CREATE INDEX IF NOT EXISTS ix_raw_temp      ON raw_measurement(temp_mK);
 CREATE INDEX IF NOT EXISTS ix_raw_cooldown  ON raw_measurement(cooldown_id);
 CREATE INDEX IF NOT EXISTS ix_raw_integrity ON raw_measurement(integrity_pass);
